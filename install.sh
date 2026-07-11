@@ -54,8 +54,13 @@ DESKTOP_DIR="$HOME/.local/share/applications"
 mkdir -p "$DESKTOP_DIR"
 cp "$(dirname "$0")/speedboster.desktop" "$DESKTOP_DIR/"
 
+echo "==> Enabling autostart on login"
+AUTOSTART_DIR="$HOME/.config/autostart"
+mkdir -p "$AUTOSTART_DIR"
+cp "$(dirname "$0")/speedboster.desktop" "$AUTOSTART_DIR/"
+
 echo
 echo "Done. You were added to the 'msi-ec' group -- log out and back in (or reboot)"
 echo "for that to take effect, otherwise fan control will fail with a permission error."
 echo "Make sure $BIN_DIR is on your PATH, then launch SpeedBoster from the app menu"
-echo "or run 'speedboster' in a terminal."
+echo "or run 'speedboster' in a terminal. It will now also start automatically on login."
