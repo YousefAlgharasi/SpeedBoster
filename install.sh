@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Installs SpeedBoster and its dependencies on Zorin/Ubuntu.
+# Installs SpeedBoster and its dependencies on Zorin/Ubuntu for MSI laptops.
 set -euo pipefail
 
 if [ "$(id -u)" -eq 0 ]; then
@@ -10,21 +10,31 @@ fi
 echo "==> Installing system dependencies"
 sudo apt update
 sudo apt install -y python3-gi gir1.2-appindicator3-0.1 lm-sensors dkms git build-essential \
-    liblua5.4-dev pkg-config libxml2-dev libcurl4-openssl-dev libssl-dev
+    "linux-headers-$(uname -r)"
 
 echo "==> Configuring lm-sensors (answer the prompts, defaults are fine)"
 sudo sensors-detect --auto || true
 
-if ! command -v nbfc >/dev/null 2>&1; then
-    echo "==> Installing nbfc-linux (fan control daemon)"
+if ! lsmod | grep -q '^msi_ec'; then
+    echo "==> Installing msi-ec (MSI embedded-controller driver)"
     tmpdir=$(mktemp -d)
-    git clone --depth 1 https://github.com/nbfc-linux/nbfc-linux "$tmpdir/nbfc-linux"
-    (cd "$tmpdir/nbfc-linux" && sudo make install)
-    sudo systemctl enable --now nbfc_service.service
+    git clone --depth 1 https://github.com/BeardOverflow/msi-ec.git "$tmpdir/msi-ec"
+    (cd "$tmpdir/msi-ec" && sudo make dkms-install)
+    sudo modprobe msi-ec
     rm -rf "$tmpdir"
 else
-    echo "==> nbfc already installed, skipping"
+    echo "==> msi-ec already loaded, skipping"
 fi
+
+echo "==> Setting up permissions so SpeedBoster can control fan settings without root"
+sudo groupadd -f msi-ec
+sudo usermod -aG msi-ec "$USER"
+sudo tee /etc/udev/rules.d/99-msi-ec.rules > /dev/null <<'EOF'
+SUBSYSTEM=="platform", KERNEL=="msi-ec", RUN+="/bin/chgrp msi-ec /sys/devices/platform/msi-ec/fan_mode /sys/devices/platform/msi-ec/cooler_boost", RUN+="/bin/chmod 664 /sys/devices/platform/msi-ec/fan_mode /sys/devices/platform/msi-ec/cooler_boost"
+EOF
+sudo udevadm control --reload-rules
+sudo rmmod msi_ec 2>/dev/null || true
+sudo modprobe msi-ec
 
 echo "==> Installing SpeedBoster"
 INSTALL_DIR="$HOME/.local/share/speedboster"
@@ -45,6 +55,7 @@ mkdir -p "$DESKTOP_DIR"
 cp "$(dirname "$0")/speedboster.desktop" "$DESKTOP_DIR/"
 
 echo
-echo "Done. Make sure $BIN_DIR is on your PATH, then:"
-echo "  1. Run 'nbfc config -a' and pick your model from the list (needed once)."
-echo "  2. Launch SpeedBoster from the app menu, or run 'speedboster' in a terminal."
+echo "Done. You were added to the 'msi-ec' group -- log out and back in (or reboot)"
+echo "for that to take effect, otherwise fan control will fail with a permission error."
+echo "Make sure $BIN_DIR is on your PATH, then launch SpeedBoster from the app menu"
+echo "or run 'speedboster' in a terminal."

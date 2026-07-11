@@ -1,16 +1,24 @@
 # SpeedBoster
 
-A minimal Dragon Center replacement for Zorin OS: a system-tray app that shows
-CPU/GPU temperatures and lets you manually lock the fan to a chosen speed.
+A minimal Dragon Center replacement for Zorin OS on MSI laptops: a system-tray
+app that shows CPU/GPU temperatures and lets you set the fan mode (auto,
+silent, basic, advanced) or trigger Cooler Boost.
 
 ## How it works
 
-- **Temperatures**: CPU via `lm-sensors` hwmon (`coretemp`/`k10temp`), GPU via `nvidia-smi`.
-- **Fan control**: via [`nbfc-linux`](https://github.com/nbfc-linux/nbfc-linux), which
-  talks to the laptop's embedded controller through ACPI — no MSI-specific kernel
-  module required, and it supports a wide range of MSI models out of the box.
-- **UI**: a GTK/AppIndicator tray icon with live temps, a fan speed slider, and a
-  "Lock fan speed" toggle (unlocked = firmware auto control).
+- **Temperatures**: read directly from [`msi-ec`](https://github.com/BeardOverflow/msi-ec)'s
+  `cpu/realtime_temperature` and `gpu/realtime_temperature`, falling back to
+  `lm-sensors` hwmon / `nvidia-smi` if msi-ec isn't loaded.
+- **Fan control**: via `msi-ec`, an in-kernel driver that recognizes your
+  laptop's embedded-controller firmware version and exposes safe sysfs
+  controls — `fan_mode` (auto/silent/basic/advanced) and `cooler_boost`
+  (on/off). This is a proper kernel driver validated against known EC
+  firmware versions, not raw register poking.
+- **UI**: a GTK/AppIndicator tray icon with live temps, radio buttons for
+  fan mode, and a Cooler Boost checkbox.
+
+Requires **Secure Boot disabled** in BIOS (needed for the DKMS-built kernel
+module to load, or for it to be signed against your own MOK key).
 
 ## Install
 
@@ -21,29 +29,26 @@ chmod +x install.sh
 ./install.sh
 ```
 
-The installer sets up `lm-sensors`, builds and installs `nbfc-linux`, and places
-`speedboster` on your PATH plus an app-menu shortcut.
+The installer sets up `lm-sensors`, builds and loads `msi-ec` via DKMS, adds a
+udev rule + `msi-ec` group so SpeedBoster can control fan settings without
+running as root, and places `speedboster` on your PATH plus an app-menu
+shortcut.
 
-After installing, run once:
-
-```bash
-nbfc config -a
-```
-
-and pick the config matching your MSI model from the list. If your exact model
-isn't listed, pick the closest one (same chassis generation) — this is the same
-approach Windows tools like NBFC/Dragon Center use internally.
+**Log out and back in (or reboot)** after installing so your user's new group
+membership takes effect.
 
 ## Run
 
-Launch **SpeedBoster** from your app menu, or run `speedboster` in a terminal.
-Click the tray icon to see temps, drag the slider to set a fan percentage, and
-check "Lock fan speed" to apply it (uncheck to hand control back to firmware).
+Launch **SpeedBoster** from your app menu, or run `speedboster` in a
+terminal. Click the tray icon to see live temps, pick a fan mode, or toggle
+Cooler Boost.
 
 ## Notes
 
-- If `nbfc config -a` doesn't list your model, fan control won't work reliably —
-  temperature monitoring will still work fine on its own.
-- Tested against generic MSI EC behavior; some models expose CPU/GPU as
-  separate fans (`nbfc set -f 0 -s N` / `-f 1 -s N`) — this can be added if
-  your model needs per-fan control.
+- `msi-ec` only supports laptops whose EC firmware version it recognizes —
+  check the [supported devices list](https://github.com/BeardOverflow/msi-ec/discussions/277)
+  for your model before installing. If unsupported, temperature monitoring
+  still falls back to hwmon/`nvidia-smi`.
+- This driver exposes fan *modes*, not an arbitrary duty-cycle percentage —
+  that matches what the MSI firmware itself actually allows on supported
+  models.
