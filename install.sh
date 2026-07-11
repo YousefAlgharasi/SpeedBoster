@@ -15,16 +15,16 @@ sudo apt install -y python3-gi gir1.2-appindicator3-0.1 lm-sensors dkms git buil
 echo "==> Configuring lm-sensors (answer the prompts, defaults are fine)"
 sudo sensors-detect --auto || true
 
-if ! lsmod | grep -q '^msi_ec'; then
+if ! dkms status 2>/dev/null | grep -q '^msi_ec'; then
     echo "==> Installing msi-ec (MSI embedded-controller driver)"
     tmpdir=$(mktemp -d)
     git clone --depth 1 https://github.com/BeardOverflow/msi-ec.git "$tmpdir/msi-ec"
     (cd "$tmpdir/msi-ec" && sudo make dkms-install)
-    sudo modprobe msi-ec
     rm -rf "$tmpdir"
 else
-    echo "==> msi-ec already loaded, skipping"
+    echo "==> msi-ec already registered with DKMS, skipping build"
 fi
+sudo modprobe msi-ec
 
 echo "==> Setting up permissions so SpeedBoster can control fan settings without root"
 sudo groupadd -f msi-ec
