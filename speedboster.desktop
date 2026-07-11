@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=SpeedBoster
+Comment=CPU/GPU temperature monitor and fan control
+Exec=speedboster
+Icon=sensors-temperature
+Terminal=false
+Categories=System;Monitor;
