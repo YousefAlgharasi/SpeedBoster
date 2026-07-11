@@ -10,12 +10,15 @@ from speedboster import fan, sensors
 
 APP_ID = "speedboster"
 REFRESH_MS = 2000
+WARN_TEMP_C = 80
+ICON_NORMAL = "sensors-temperature"
+ICON_WARNING = "dialog-warning"
 
 
 class SpeedBoosterApp:
     def __init__(self):
         self.indicator = AppIndicator3.Indicator.new(
-            APP_ID, "sensors-temperature", AppIndicator3.IndicatorCategory.APPLICATION_STATUS
+            APP_ID, ICON_NORMAL, AppIndicator3.IndicatorCategory.APPLICATION_STATUS
         )
         self.indicator.set_status(AppIndicator3.IndicatorStatus.ACTIVE)
 
@@ -26,6 +29,10 @@ class SpeedBoosterApp:
         self.menu.append(self.temp_item)
 
         self.menu.append(Gtk.SeparatorMenuItem())
+
+        self.fan_unavailable_item = Gtk.MenuItem(label="Fan control unavailable (msi-ec not loaded)")
+        self.fan_unavailable_item.set_sensitive(False)
+        self.menu.append(self.fan_unavailable_item)
 
         self._updating = False
         self.mode_items = {}
@@ -51,9 +58,16 @@ class SpeedBoosterApp:
 
         self.menu.show_all()
         self.indicator.set_menu(self.menu)
+        self._set_fan_controls_visible(fan.available())
 
         GLib.timeout_add(REFRESH_MS, self.refresh)
         self.refresh()
+
+    def _set_fan_controls_visible(self, available):
+        self.fan_unavailable_item.set_visible(not available)
+        for item in self.mode_items.values():
+            item.set_visible(available)
+        self.boost_item.set_visible(available)
 
     def on_mode_toggled(self, widget, mode):
         if self._updating or not widget.get_active():
@@ -85,7 +99,13 @@ class SpeedBoosterApp:
         gpu_str = f"{gpu:.0f}°C" if gpu is not None else "--"
         self.temp_item.set_label(f"CPU: {cpu_str}   GPU: {gpu_str}")
 
-        if fan.available():
+        hottest = max((t for t in (cpu, gpu) if t is not None), default=None)
+        icon = ICON_WARNING if hottest is not None and hottest >= WARN_TEMP_C else ICON_NORMAL
+        self.indicator.set_icon_full(icon, "SpeedBoster")
+
+        fan_available = fan.available()
+        self._set_fan_controls_visible(fan_available)
+        if fan_available:
             try:
                 state = fan.status()
                 self._updating = True
