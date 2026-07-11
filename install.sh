@@ -10,7 +10,7 @@ fi
 echo "==> Installing system dependencies"
 sudo apt update
 sudo apt install -y python3-gi gir1.2-appindicator3-0.1 lm-sensors dkms git build-essential \
-    liblua5.4-dev pkg-config libxml2-dev
+    liblua5.4-dev pkg-config libxml2-dev libcurl4-openssl-dev libssl-dev
 
 echo "==> Configuring lm-sensors (answer the prompts, defaults are fine)"
 sudo sensors-detect --auto || true
