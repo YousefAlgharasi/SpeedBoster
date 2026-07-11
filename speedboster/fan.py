@@ -1,44 +1,52 @@
-"""Fan control via nbfc-linux (Notebook FanControl)."""
-import re
-import subprocess
+"""Fan control via the msi-ec kernel driver's sysfs interface."""
+import glob
 
-NBFC = "nbfc"
+MSI_EC_ROOT = "/sys/devices/platform/msi-ec"
+
+MODES = ("auto", "silent", "basic", "advanced")
 
 
 class FanControlError(RuntimeError):
     pass
 
 
-def _run(args):
+def _read(relpath):
+    path = f"{MSI_EC_ROOT}/{relpath}"
     try:
-        result = subprocess.run([NBFC, *args], capture_output=True, text=True, timeout=5)
-    except FileNotFoundError as exc:
-        raise FanControlError("nbfc is not installed. See README for setup.") from exc
-    if result.returncode != 0:
-        raise FanControlError(result.stderr.strip() or f"nbfc {' '.join(args)} failed")
-    return result.stdout
+        with open(path) as f:
+            return f.read().strip()
+    except OSError as exc:
+        raise FanControlError(f"msi-ec not available ({path}): {exc}") from exc
+
+
+def _write(relpath, value):
+    path = f"{MSI_EC_ROOT}/{relpath}"
+    try:
+        with open(path, "w") as f:
+            f.write(str(value))
+    except OSError as exc:
+        raise FanControlError(f"failed writing {path}: {exc}") from exc
+
+
+def available():
+    return bool(glob.glob(MSI_EC_ROOT))
 
 
 def status():
-    """Return dict with keys: fan_speed (percent, float|None), auto (bool)."""
-    out = _run(["status", "-a"])
-    fan_speed = None
-    auto = True
-    m = re.search(r"Current Fan Speed\s*:\s*([\d.]+)", out)
-    if m:
-        fan_speed = float(m.group(1))
-    m = re.search(r"Auto Control\s*:\s*(\w+)", out)
-    if m:
-        auto = m.group(1).lower() == "enabled"
-    return {"fan_speed": fan_speed, "auto": auto}
+    """Return dict with fan_mode, cooler_boost (bool), cpu_rpm_pct, gpu_rpm_pct."""
+    return {
+        "fan_mode": _read("fan_mode"),
+        "cooler_boost": _read("cooler_boost") == "on",
+        "cpu_fan_speed": _read("cpu/realtime_fan_speed"),
+        "gpu_fan_speed": _read("gpu/realtime_fan_speed"),
+    }
 
 
-def set_speed(percent):
-    """Lock fan to a manual speed percentage (0-100)."""
-    percent = max(0, min(100, int(percent)))
-    _run(["set", "-s", str(percent)])
+def set_mode(mode):
+    if mode not in MODES:
+        raise FanControlError(f"unknown fan mode {mode!r}, expected one of {MODES}")
+    _write("fan_mode", mode)
 
 
-def set_auto():
-    """Release manual control, let firmware manage the fan again."""
-    _run(["set", "-a"])
+def set_cooler_boost(enabled):
+    _write("cooler_boost", "on" if enabled else "off")

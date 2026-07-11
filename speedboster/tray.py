@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""SpeedBoster: a simple tray app to monitor CPU/GPU temps and set fan speed."""
+"""SpeedBoster: a simple tray app to monitor CPU/GPU temps and set fan mode."""
 import gi
 
 gi.require_version("Gtk", "3.0")
@@ -27,21 +27,21 @@ class SpeedBoosterApp:
 
         self.menu.append(Gtk.SeparatorMenuItem())
 
-        slider_item = Gtk.MenuItem()
-        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        box.set_border_width(6)
-        box.pack_start(Gtk.Label(label="Fan"), False, False, 0)
-        self.slider = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 100, 5)
-        self.slider.set_value(50)
-        self.slider.set_size_request(140, -1)
-        self.slider.connect("value-changed", self.on_slider_changed)
-        box.pack_start(self.slider, True, True, 0)
-        slider_item.add(box)
-        self.menu.append(slider_item)
+        self._updating = False
+        self.mode_items = {}
+        for mode in fan.MODES:
+            item = Gtk.RadioMenuItem.new_with_label_from_widget(
+                next(iter(self.mode_items.values()), None), mode.capitalize()
+            )
+            item.connect("toggled", self.on_mode_toggled, mode)
+            self.menu.append(item)
+            self.mode_items[mode] = item
 
-        self.lock_item = Gtk.CheckMenuItem(label="Lock fan speed")
-        self.lock_item.connect("toggled", self.on_lock_toggled)
-        self.menu.append(self.lock_item)
+        self.menu.append(Gtk.SeparatorMenuItem())
+
+        self.boost_item = Gtk.CheckMenuItem(label="Cooler Boost")
+        self.boost_item.connect("toggled", self.on_boost_toggled)
+        self.menu.append(self.boost_item)
 
         self.menu.append(Gtk.SeparatorMenuItem())
 
@@ -55,21 +55,21 @@ class SpeedBoosterApp:
         GLib.timeout_add(REFRESH_MS, self.refresh)
         self.refresh()
 
-    def on_lock_toggled(self, widget):
+    def on_mode_toggled(self, widget, mode):
+        if self._updating or not widget.get_active():
+            return
         try:
-            if widget.get_active():
-                fan.set_speed(self.slider.get_value())
-            else:
-                fan.set_auto()
+            fan.set_mode(mode)
         except fan.FanControlError as exc:
             self.show_error(str(exc))
 
-    def on_slider_changed(self, widget):
-        if self.lock_item.get_active():
-            try:
-                fan.set_speed(widget.get_value())
-            except fan.FanControlError as exc:
-                self.show_error(str(exc))
+    def on_boost_toggled(self, widget):
+        if self._updating:
+            return
+        try:
+            fan.set_cooler_boost(widget.get_active())
+        except fan.FanControlError as exc:
+            self.show_error(str(exc))
 
     def show_error(self, message):
         dialog = Gtk.MessageDialog(
@@ -84,6 +84,20 @@ class SpeedBoosterApp:
         cpu_str = f"{cpu:.0f}°C" if cpu is not None else "--"
         gpu_str = f"{gpu:.0f}°C" if gpu is not None else "--"
         self.temp_item.set_label(f"CPU: {cpu_str}   GPU: {gpu_str}")
+
+        if fan.available():
+            try:
+                state = fan.status()
+                self._updating = True
+                item = self.mode_items.get(state["fan_mode"])
+                if item is not None:
+                    item.set_active(True)
+                self.boost_item.set_active(state["cooler_boost"])
+            except fan.FanControlError:
+                pass
+            finally:
+                self._updating = False
+
         return True
 
 
