@@ -20,7 +20,7 @@ if ! command -v nbfc >/dev/null 2>&1; then
     tmpdir=$(mktemp -d)
     git clone --depth 1 https://github.com/nbfc-linux/nbfc-linux "$tmpdir/nbfc-linux"
     (cd "$tmpdir/nbfc-linux" && sudo make install)
-    sudo systemctl enable --now nbfc.service
+    sudo systemctl enable --now nbfc_service.service
     rm -rf "$tmpdir"
 else
     echo "==> nbfc already installed, skipping"
